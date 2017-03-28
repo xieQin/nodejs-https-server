@@ -2,6 +2,7 @@ const app = require('express')();
 const fs = require('fs');
 const http = require('http');
 const https = require('https');
+const net = require('net');
 
 //＃生成私钥key文件
 //openssl genrsa 1024 > private.pem
@@ -20,17 +21,39 @@ const httpServer = http.createServer(app);
 const httpsServer = https.createServer(credentials, app);
 const PORT = 18080;
 const SSLPORT = 18081;
+const DOUBLE_POSRT = 18082
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({
     extended: true
 }));
 
-httpServer.listen(PORT, function() {
+httpServer.listen(PORT, () => {
     console.log('Http Server is running on: http://localhost:%s', PORT);
 });
-httpsServer.listen(SSLPORT, function() {
+httpsServer.listen(SSLPORT, () => {
     console.log('Https Server is running on: https://localhost:%s', SSLPORT);
+});
+net.createServer((socket) => {
+    socket.once('data', (buf) => {
+        var address = buf[0] === 22 ? SSLPORT : PORT;
+        //创建一个指向https或http服务器的链接
+        var proxy = net.createConnection(address, function() {
+            proxy.write(buf);
+            //反向代理的过程，tcp接受的数据交给代理链接，代理链接服务器端返回数据交由socket返回给客户端
+            socket.pipe(proxy).pipe(socket);
+        });
+        
+        proxy.on('error', function(err) {
+            console.log(err);
+        });
+    });
+    
+    socket.on('error', function(err) {
+        console.log(err);
+    });
+}).listen(DOUBLE_POSRT, () => {
+    console.log('Https and Http is running on: %s', DOUBLE_POSRT);
 });
 
 //https请求代理
