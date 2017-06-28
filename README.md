@@ -5,7 +5,7 @@ nodejs https服务，支持https代理请求
 ```js
 const proxyConfig = {
     // 代理服务根地址
-    target: '/invoke.json',
+    target: '/',
     options: {
         //远程api域名地址
         hostname: 'api.example.com',
