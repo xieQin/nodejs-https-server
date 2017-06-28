@@ -4,3 +4,5 @@ npm-debug.log
 csr.pem
 file.crt
 private.pem
+json
+config.js

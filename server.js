@@ -3,6 +3,7 @@ const fs = require('fs');
 const http = require('http');
 const https = require('https');
 const net = require('net');
+const proxyConfig = require('./config.js')
 
 //＃生成私钥key文件
 //openssl genrsa 1024 > private.pem
@@ -12,6 +13,21 @@ const net = require('net');
 
 //＃通过私钥文件和CSR证书签名生成证书文件
 //openssl x509 -req -days 365 -in csr.pem -signkey private.pem -out file.crt
+//
+//代理配置
+// const proxyConfig = {
+//     target: '/',
+//     options: {
+//         hostname: 'api.example.com',
+//         path: '/',
+//         port: 443,
+//         method: 'POST',
+//         content: 'form'
+//     },
+//     PORT: 18080,
+//     SSLPORT: 18081,
+//     DOUBLE_POSRT: 18082
+// }
 
 const privateKey  = fs.readFileSync('private.pem', 'utf8');
 const certificate = fs.readFileSync('file.crt', 'utf8');
@@ -19,9 +35,9 @@ const credentials = {key: privateKey, cert: certificate};
 const bodyParser = require('body-parser');
 const httpServer = http.createServer(app);
 const httpsServer = https.createServer(credentials, app);
-const PORT = 18080;
-const SSLPORT = 18081;
-const DOUBLE_POSRT = 18082
+const PORT = proxyConfig.PORT;
+const SSLPORT = proxyConfig.SSLPORT;
+const DOUBLE_POSRT = proxyConfig.DOUBLE_POSRT;
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({
@@ -74,29 +90,41 @@ const httpsProxy = (opts, req, res) => {
             "Content-Length": data.length
         }
     }, opts);
-    let api_req = https.request(options, (response) => {
-        console.log('statusCode:', response.statusCode);
-        console.log('headers:', response.headers);
-        let result = ''
-        if (response.statusCode == 200) {
-            response.on('data', (d) => {
-                process.stdout.write(d);
-                result += d
-            }).on('end', (d) => {
-                res.status(200).send(result)
-            });
+    let filePath = './json/' + req.body.id + '.json'
+    fs.exists(filePath, (exists) => {
+        if (exists) {
+            let result = fs.readFileSync(filePath);
+            res.status(200).send(result)
         }
         else {
-            res.status(500).send("error");
-        }
-    }); 
+            let api_req = https.request(options, (response) => {
+                console.log('statusCode:', response.statusCode);
+                console.log('headers:', response.headers);
+                let result = ''
+                if (response.statusCode == 200) {
+                    response.on('data', (d) => {
+                        // process.stdout.write(d);
+                        result += d
+                    }).on('end', (d) => {
+                        if (JSON.parse(JSON.parse(result).data).status == 'SUCCESS') {
+                            fs.writeFileSync(filePath, result, 'utf8')
+                        }
+                        res.status(200).send(result)
+                    });
+                }
+                else {
+                    res.status(500).send("error");
+                }
+            }); 
 
-    api_req.on('error', (e) => {
-        console.error(e);
-        res.status(500).send("error");
+            api_req.on('error', (e) => {
+                console.error(e);
+                res.status(500).send("error");
+            });
+            api_req.write(data + '\n');
+            api_req.end();
+        }
     });
-    api_req.write(data + '\n');
-    api_req.end();
 }
 
 app.all('*', (req, res, next) => {
@@ -117,19 +145,7 @@ app.get('/', (req, res) => {
     }
 });
 
-//代理配置
-const proxyConfig = {
-    target: '/api',
-    options: {
-        hostname: 'api.example.com',
-        path: '/',
-        port: 443,
-        method: 'POST',
-        content: 'form'
-    }
-}
-
 app.all(proxyConfig.target, (req, res) => {
-    console.log(req.body);
+    // console.log(req.body);
     httpsProxy(proxyConfig.options, req, res);
 });
